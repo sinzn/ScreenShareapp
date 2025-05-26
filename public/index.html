@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Screen Share App</title>
+</head>
+<body>
+  <center>
+    <h2>Screen Share App </h2>
+    <input id="room" placeholder="Enter Room Id"><br><br>
+    <button onclick="createRoom()">Create Room & Share Screen</button>
+    <button onclick="joinRoom()">Join Room & View Screen</button>
+    <div id="videoContainer" style="margin-top:20px;"></div>
+  </center>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let roomName = "";
+    let videoElem;
+
+    function createRoom() {
+      roomName = document.getElementById('room').value;
+      if (!roomName) return alert('Enter a room name');
+      socket.emit('join-room', roomName);
+      startScreenShare();
+    }
+
+    function joinRoom() {
+      roomName = document.getElementById('room').value;
+      if (!roomName) return alert('Enter a room Id');
+      socket.emit('join-room', roomName);
+    }
+
+    function startScreenShare() {
+      navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+        .then(stream => {
+          const video = document.createElement('video');
+          videoElem = video;
+          video.srcObject = stream;
+          video.autoplay = true;
+          video.width = 600;
+          document.getElementById('videoContainer').appendChild(video);
+          const track = stream.getVideoTracks()[0];
+          const imageCapture = new ImageCapture(track);
+          sendScreen(imageCapture);
+        })
+        .catch(err => alert('Error sharing screen: ' + err));
+    }
+
+    function sendScreen(imageCapture) {
+      imageCapture.grabFrame().then(bitmap => {
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        const data = canvas.toDataURL('image/webp');
+        socket.emit('screen-data', data);
+        setTimeout(() => sendScreen(imageCapture), 100);
+      });
+    }
+
+    socket.on('screen-data', data => {
+      const img = new Image();
+      img.src = data;
+      img.width = 600;
+      const container = document.getElementById('videoContainer');
+      container.innerHTML = '';
+      container.appendChild(img);
+    });
+
+    socket.on('user-left', () => {
+      document.getElementById('videoContainer').innerHTML = '<p>User left the room</p>';
+    });
+  </script>
+</body>
+</html>
